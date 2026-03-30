@@ -14,45 +14,9 @@
 #include <future>
 #include <regex>
 
-void init_layer_buffer() {
-    if (g_layer_buffer != nullptr) {
-        return;
-    }
-    size_t max_layer_bytes = 0;
 
-    for (int i = 0; i < MAX_LAYERS; i++) {
-        //fprintf(stderr, "Layer %d: total_bytes_needed = %" PRIu64 " bytes\n", i, g_my_layer_table[i].total_bytes_needed);
-        printf("Layer %d: total_bytes_needed = %" PRIu64 " bytes\n", i, g_my_layer_table[i].total_bytes_needed);
-        if (g_my_layer_table[i].total_bytes_needed > max_layer_bytes) {
-            max_layer_bytes = g_my_layer_table[i].total_bytes_needed;
-        }
-    }
 
-    g_layer_buffer_size = (size_t)(max_layer_bytes * 1.05);
 
-    g_layer_buffer = malloc(g_layer_buffer_size);
-    if (!g_layer_buffer) {
-        fprintf(stderr, "Fatal Error: Failed to pre-allocate static layer buffer of size %zu!\n", g_layer_buffer_size);
-        exit(1);
-    }
-
-    fprintf(stderr, "Success: Allocated %zu bytes for Static Layer Buffer.\n", g_layer_buffer_size);
-}
-
-void init_layer_table() {
-    static bool already_cleared = false;
-    if (already_cleared) return;//避免重入
-    memset(g_my_layer_table, 0, sizeof(g_my_layer_table));
-
-    for (int i = 0; i < MAX_LAYERS; i++) {
-        g_my_layer_table[i].layer_id = -2;
-        g_my_layer_table[i].is_initialized = false;
-        g_my_layer_table[i].tensor_count = 0;
-        g_my_layer_table[i].total_bytes_needed = 0;
-
-    }
-    already_cleared = true;
-}
 
 
 static const size_t kiB = 1024;
@@ -988,7 +952,9 @@ llama_model_loader::llama_model_loader(
     this->no_alloc = no_alloc;
 
     //初始化buffer
-    init_layer_buffer();
+    //init_layer_buffer(g_layer_buffer_A);
+    //init_layer_buffer(g_layer_buffer_B);
+    start_async_prefetch_engine();
 }
 
 std::string llama_model_loader::get_arch_name() const {

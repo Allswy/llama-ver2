@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+
 // 定义常量
 #define MAX_LAYERS 1005
 #define MAX_TENSORS_PER_LAYER 64
@@ -35,13 +36,22 @@ extern "C" {
     extern struct LayerDiskInfo g_my_layer_table[MAX_LAYERS];
     extern int    g_current_loaded_layer;
     extern FILE * g_model_file;           // GGUF 文件句柄
-    extern void * g_layer_buffer;         // 你的缓冲区指针
+    extern void * g_layer_buffer_A;         // 缓冲区指针
+    extern void * g_layer_buffer_B;         // 缓冲区指针
+    extern void * g_io_ptr;
+    extern void * g_compute_ptr;
     extern size_t g_layer_buffer_size;    // 缓冲区大小
 
-    // 3. 声明函数原型
+
+
+
+    // 声明函数原型
     void load_layer_from_disk(int target_layer);
     void init_layer_table(void);
-    void init_layer_buffer(void);
+    void* get_tensor_memory_by_name(int target_layer, const char* tensor_name);
+    void start_async_prefetch_engine(void);
+    void ensure_layer_loaded(int target_layer, int next_layer_hint);
+    int get_next_layer(int current_layer);
 
 
 #ifdef __cplusplus

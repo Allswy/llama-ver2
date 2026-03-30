@@ -52,17 +52,18 @@
 #include "llamafile/sgemm.h"
 #endif
 
-struct LayerDiskInfo g_my_layer_table[MAX_LAYERS];
-void* g_layer_buffer = NULL;             // 指向Buffer头部
-size_t g_layer_buffer_size = 0;              // Buffer 的容量
-FILE* g_model_file = NULL;               // 模型文件
-int g_current_loaded_layer = -999;        // 标记当前内存里是哪一层
-
-
-
+//获取下一层
+int get_next_layer(int current_layer) {
+    if (current_layer == 998) return 0;                             
+    if (current_layer >= 0 && current_layer < 27) return current_layer + 1; 
+    if (current_layer == 27) return 999;                            
+    return -999;                                                    
+}
 
 // 按需读取文件到Buffer
 void load_layer_from_disk(int target_layer) {
+    void* g_layer_buffer = g_io_ptr;
+    
     //printf("Loading layer %d from disk...\n", target_layer);
     if (target_layer < 0 || target_layer >= MAX_LAYERS) return;
     if (!g_my_layer_table[target_layer].is_initialized) return;
@@ -3077,14 +3078,10 @@ static thread_ret_t ggml_graph_compute_thread(void * data) {
             }
         }
 
-        // 单线程存取
         if (state->ith == 0) {
-            extern int g_current_loaded_layer;
+            int next_layer = get_next_layer(target_layer);
+            ensure_layer_loaded(target_layer, next_layer);
 
-            if (target_layer != -999 && target_layer != g_current_loaded_layer) {
-                load_layer_from_disk(target_layer);
-                g_current_loaded_layer = target_layer;
-            }
 
             if (target_layer != -999) {
                 for (int i = 0; i < GGML_MAX_SRC; i++) {
