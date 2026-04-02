@@ -1381,14 +1381,29 @@ struct llama_model_params common_model_params_to_llama(common_params & params) {
 
 struct llama_context_params common_context_params_to_llama(const common_params & params) {
     auto cparams = llama_context_default_params();
+    
+
+    
+
 
     cparams.n_ctx             = params.n_ctx;
     cparams.n_seq_max         = params.n_parallel;
     cparams.n_batch           = params.n_batch;
     cparams.n_ubatch          = params.n_ubatch;
+
+
+    // // 获取最大可用线程数
+    // int max_threads = std::thread::hardware_concurrency();
+    // int compute_threads = max_threads > 15 ? max_threads - 15 : 1; 
+    // printf("%s: max_threads = %d, compute_threads = %d\n", __func__, max_threads, compute_threads);
+
+    // // 覆盖原来的参数赋值
+    // cparams.n_threads         = compute_threads;
+    // cparams.n_threads_batch   = compute_threads;
+
     cparams.n_threads         = params.cpuparams.n_threads;
     cparams.n_threads_batch   = params.cpuparams_batch.n_threads == -1 ?
-                                params.cpuparams.n_threads : params.cpuparams_batch.n_threads;
+                               params.cpuparams.n_threads : params.cpuparams_batch.n_threads;
     cparams.embeddings        = params.embedding;
     cparams.rope_scaling_type = params.rope_scaling_type;
     cparams.rope_freq_base    = params.rope_freq_base;

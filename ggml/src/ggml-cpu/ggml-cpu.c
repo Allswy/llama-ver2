@@ -100,6 +100,16 @@ void load_layer_from_disk(int target_layer) {
         #endif
 
 
+         //————————————————————————————————调试
+
+        // if (target_layer == 0 && i == 0) { // 只挑 Layer 0 的第一个 Tensor 来看
+        //     float* val = (float*)target_memory_addr;
+        //     printf("\n[DEBUG] Layer 0, Tensor 0, FileOffset: %llu\n", loc->absolute_file_offset);
+        //     printf("[DEBUG] Values: %f, %f, %f, %f\n\n", val[0], val[1], val[2], val[3]);
+            
+        //     // exit(0); 
+        // }
+
         //loc->tensor->data = target_memory_addr;
         loc->cached_pool_addr = target_memory_addr;
         current_buffer_offset += loc->n_bytes;

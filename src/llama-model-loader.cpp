@@ -16,9 +16,6 @@
 
 
 
-
-
-
 static const size_t kiB = 1024;
 static const size_t MiB = 1024*kiB;
 static const size_t GiB = 1024*MiB;
@@ -597,7 +594,7 @@ llama_model_loader::llama_model_loader(
             else if (tensor_name == "output_norm.weight") layer_id = 1000;
             // 整个 GGUF 文件数据区的起始绝对位置
             size_t data_start_offset = gguf_get_data_offset(metadata);
-
+            //printf("data_start_offset: %zu\n", data_start_offset);
             // 通过张量名字，在 metadata 里查到它的索引编号
             int tensor_idx = gguf_find_tensor(metadata, tensor_name.c_str());
 

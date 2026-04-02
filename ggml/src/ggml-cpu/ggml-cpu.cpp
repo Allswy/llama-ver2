@@ -732,7 +732,7 @@ static void init_layer_buffer(void *& g_layer_buffer) {
 }
 
 extern "C" {
-    // 1. 变量定义 (实体在这里！)
+    // 变量定义
     struct LayerDiskInfo g_my_layer_table[MAX_LAYERS];
     int g_current_loaded_layer = -999;
     FILE * g_model_file = nullptr;
@@ -742,7 +742,7 @@ extern "C" {
     void * g_compute_ptr = nullptr;
     size_t g_layer_buffer_size = 0;
 
-    // 2. 线程同步变量 (static 仅限本文件使用)
+    //线程同步变量
     static std::thread* g_io_thread = nullptr;
     static std::mutex g_io_mutex;
     static std::condition_variable g_cv_worker;
@@ -752,7 +752,7 @@ extern "C" {
     static std::atomic<bool> g_io_shutdown{false};
     static int g_currently_loaded_in_compute = -999;
 
-    // 3. 函数实现
+    // 函数实现
     
     static void io_worker_func() {
         while (!g_io_shutdown) {
@@ -765,9 +765,9 @@ extern "C" {
             //printf("[Worker] Starting to load layer %d from disk...\n", target);
 
 
-            lock.unlock(); // 解锁，绝不阻塞前线
+            lock.unlock(); // 解锁
 
-            load_layer_from_disk(target); // 调用 C 的读盘函数
+            load_layer_from_disk(target); 
 
             lock.lock();
             if (g_prefetch_target_layer == target) {
@@ -799,95 +799,58 @@ extern "C" {
         //printf("[Async Engine] Ping-Pong Buffers ready. I/O Worker Started!\n");
     }
 
-    // void ensure_layer_loaded(int target_layer, int next_layer_hint) {
-    //     if (target_layer == -999) {
-    //         return; 
-    //     }
-    //     if (g_currently_loaded_in_compute != target_layer) {
-
-    //         //调试
-    //         printf("[Main] Waiting for layer %d...\n", target_layer);
-    //         std::unique_lock<std::mutex> lock(g_io_mutex);
-            
-    //         if (g_prefetch_target_layer != target_layer && g_prefetch_done_layer == target_layer) {
-    //             g_prefetch_target_layer = target_layer;
-    //             g_prefetch_done_layer = false;
-    //             g_cv_worker.notify_all();
-    //         }
-
-    //         g_cv_main.wait(lock, []{ return g_prefetch_done_layer == target_layer; });
-
-    //         // 指针交换
-    //         std::swap(g_compute_ptr, g_io_ptr);
-            
-    //         g_currently_loaded_in_compute = target_layer;
-    //         g_prefetch_done_layer = -999; // 重置状态
-
-    //         //调试
-    //         printf("[Main] Layer %d ready, swapped pointers.\n", target_layer);
-    //     }
-
-    //     if (next_layer_hint != -999) {
-    //         std::unique_lock<std::mutex> lock(g_io_mutex);
-    //         if (g_prefetch_target_layer == -999 && !g_prefetch_done_layer == next_layer_hint) {
-    //             g_prefetch_target_layer = next_layer_hint;
-    //             g_prefetch_done_layer = -999;
-    //             g_cv_worker.notify_all(); 
-    //         }
-    //     }
-    // }
     
-    extern "C" void ensure_layer_loaded(int target_layer, int next_layer_hint) {
-    // 1. 非法层直接忽略
-    if (target_layer == -999) return;
+    void ensure_layer_loaded(int target_layer, int next_layer_hint) {
+        // 非法层直接忽略
+        if (target_layer == -999) return;
 
-    {
-        // 这里的 { } 括号非常重要，它决定了锁的生存周期
-        std::unique_lock<std::mutex> lock(g_io_mutex);
-
-        // 如果当前池子里不是我们要算的层
-        if (g_currently_loaded_in_compute != target_layer) {
+        { //限制锁的生存周期
             
-            // 如果后台没在搬这层，且搬完的也不是这层，则下达紧急指令
-            if (g_prefetch_target_layer != target_layer && g_prefetch_done_layer != target_layer) {
-                //printf("[Main] Target mismatch! Ordering urgent load of layer %d...\n", target_layer);
-                g_prefetch_target_layer = target_layer;
-                g_prefetch_done_layer = -999; // 重置完成标志
-                g_cv_worker.notify_all();     // 唤醒快递员
+            std::unique_lock<std::mutex> lock(g_io_mutex);
+
+            // 如果当前池子里不是我们要算的层
+            if (g_currently_loaded_in_compute != target_layer) {
+                
+                // 如果后台没在搬这层，且搬完的也不是这层，则下达紧急指令
+                if (g_prefetch_target_layer != target_layer && g_prefetch_done_layer != target_layer) {
+                    //printf("[Main] Target mismatch! Ordering urgent load of layer %d...\n", target_layer);
+                    g_prefetch_target_layer = target_layer;
+                    g_prefetch_done_layer = -999; 
+                    g_cv_worker.notify_all();   
+                }
+
+                g_cv_main.wait(lock, [&]{ 
+                    return g_prefetch_done_layer == target_layer; 
+                });
+
+                std::swap(g_compute_ptr, g_io_ptr);
+                g_currently_loaded_in_compute = target_layer;
+
+
+                //显示现在正在使用的池子
+                const char* compute_pool_name = (g_compute_ptr == g_layer_buffer_A) ? "Buffer A" : 
+                                        ((g_compute_ptr == g_layer_buffer_B) ? "Buffer B" : "UNKNOWN");
+                //printf("[Probe-CPU] Layer %d ready. Computing inside [%s]\n", target_layer, compute_pool_name);
+                
+                // 交换完后，我们不需要立即重置 done_layer，
+                // 这样如果下个 Node 还是这层，它就能直接通过上面的判断
+                //printf("[Main] Layer %d ready for computation.\n", target_layer);
             }
+        } 
 
-            g_cv_main.wait(lock, [&]{ 
-                return g_prefetch_done_layer == target_layer; 
-            });
-
-            std::swap(g_compute_ptr, g_io_ptr);
-            g_currently_loaded_in_compute = target_layer;
-
-
-            //显示现在正在使用的池子
-            const char* compute_pool_name = (g_compute_ptr == g_layer_buffer_A) ? "Buffer A" : 
-                                       ((g_compute_ptr == g_layer_buffer_B) ? "Buffer B" : "UNKNOWN");
-            //printf("[Probe-CPU] 🚀 Layer %d ready. Computing inside [%s]\n", target_layer, compute_pool_name);
+        //预取下一层
+        if (next_layer_hint != -999) {
+            std::unique_lock<std::mutex> lock(g_io_mutex);
             
-            // 交换完后，我们不需要立即重置 done_layer，
-            // 这样如果下个 Node 还是这层，它就能直接通过上面的判断
-            //printf("[Main] Layer %d ready for computation.\n", target_layer);
-        }
-    } // 锁在这里自动释放！这样后台线程才能在主线程算这段时间去抢锁搬下一层
-
-    // 2. 预取下一层（如果工长已经算上了，就给快递员派个闲活）
-    if (next_layer_hint != -999) {
-        std::unique_lock<std::mutex> lock(g_io_mutex);
-        
-        // 只有快递员现在闲着，且他还没搬完下一层时，才下订单
-        if (g_prefetch_target_layer == -999 && g_prefetch_done_layer != next_layer_hint) {
-            g_prefetch_target_layer = next_layer_hint;
-            g_prefetch_done_layer = -999; // 准备搬新的，重置状态
-            g_cv_worker.notify_all();
-            // printf("[Main] Hinted worker to prefetch next layer %d.\n", next_layer_hint);
+            // 子线程空闲，且目标层不是正在搬的，也不是搬完的，就下达预取指令
+            if (g_prefetch_target_layer == -999 && g_prefetch_done_layer != next_layer_hint) {
+                g_prefetch_target_layer = next_layer_hint;
+                g_prefetch_done_layer = -999; // 准备搬新的，重置状态
+                g_cv_worker.notify_all();
+                // printf("[Main] Hinted worker to prefetch next layer %d.\n", next_layer_hint);
+            }
         }
     }
-}
 
     void init_layer_table() {
         static bool already_cleared = false;
